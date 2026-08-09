@@ -2527,21 +2527,4 @@ WHERE prev1 IS NOT NULL;
 
 
 
-
-
-
-| لو شوفتي في السؤال...      | فكري في...                                 |
-| -------------------------- | ------------------------------------------ |
-| Running total / cumulative | `SUM() OVER(ORDER BY ...)`                 |
-| Running average            | `AVG() OVER(ORDER BY ...)`                 |
-| Top N per group            | `ROW_NUMBER()` / `RANK()` + `PARTITION BY` |
-| Percentage of total        | `SUM() OVER()`                             |
-| Percentage داخل كل قسم     | `SUM() OVER(PARTITION BY ...)`             |
-| Previous row               | `LAG()`                                    |
-| Next row                   | `LEAD()`                                   |
-| Consecutive days           | `LAG()` أو Pattern الـ Gaps & Islands      |
-| Department average         | `AVG() OVER(PARTITION BY ...)`             |
-| Duplicates                 | `GROUP BY` + `HAVING COUNT(*) > 1`         |
-
-
 """

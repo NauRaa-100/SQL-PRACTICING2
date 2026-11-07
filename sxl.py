@@ -586,3 +586,195 @@ ON e.employee_id = o.employee_id
 """
 #---------------------------------------
 #---------------------------------------
+
+
+#keep SQL
+
+#SCHEMA
+
+'''
+CREATE TABLE orders (
+    order_id       INT PRIMARY KEY,
+    customer_id    INT,
+    employee_id    INT,
+    order_date     DATE,
+    status         VARCHAR(30),
+    payment_method VARCHAR(30),
+    FOREIGN KEY (customer_id) REFERENCES customers(customer_id),
+    FOREIGN KEY (employee_id) REFERENCES employees(employee_id)
+);
+#----
+CREATE TABLE order_items (
+    order_item_id INT PRIMARY KEY,
+    order_id      INT NOT NULL,
+    product_id    INT NOT NULL,
+    quantity      INT NOT NULL,
+    unit_price    DECIMAL(10,2) NOT NULL,
+    discount_pct  DECIMAL(5,2) DEFAULT 0,
+    FOREIGN KEY (order_id) REFERENCES orders(order_id),
+    FOREIGN KEY (product_id) REFERENCES products(product_id)
+);
+
+'''
+
+#Calculate the total revenue 
+#generated from completed orders only.
+
+"""
+SELECT
+    SUM(
+        oi.quantity * oi.unit_price *
+        (1 - COALESCE(oi.discount_pct, 0) / 100.0)
+    ) AS total_revenue
+FROM orders o
+JOIN order_items oi
+    ON o.order_id = oi.order_id
+WHERE o.status = 'Completed'
+"""
+
+#--------------------------
+
+#Calculate monthly revenue 
+#and the number of completed orders.
+
+"""
+SELECT
+    DATE_TRUNC('month', o.order_date) AS month,
+    COUNT(DISTINCT o.order_id) AS num_of_orders,
+
+    SUM(
+        oi.quantity * oi.unit_price *
+        (1 - COALESCE(oi.discount_pct, 0) / 100.0)
+    ) AS monthly_revenue
+
+FROM orders o
+
+JOIN order_items oi
+    ON o.order_id = oi.order_id
+
+WHERE o.status = 'Completed'
+
+GROUP BY DATE_TRUNC('month', o.order_date)
+
+ORDER BY month
+"""
+#---------------------------
+
+#SCHEMA
+
+'''
+CREATE TABLE products (
+    product_id   INT PRIMARY KEY,
+    product_name VARCHAR(100) NOT NULL,
+    category     VARCHAR(80),
+    unit_cost    DECIMAL(10,2),
+    list_price   DECIMAL(10,2)
+);
+
+CREATE TABLE orders (
+    order_id       INT PRIMARY KEY,
+    customer_id    INT,
+    employee_id    INT,
+    order_date     DATE,
+    status         VARCHAR(30),
+    payment_method VARCHAR(30),
+    FOREIGN KEY (customer_id) REFERENCES customers(customer_id),
+    FOREIGN KEY (employee_id) REFERENCES employees(employee_id)
+);
+
+CREATE TABLE order_items (
+    order_item_id INT PRIMARY KEY,
+    order_id      INT NOT NULL,
+    product_id    INT NOT NULL,
+    quantity      INT NOT NULL,
+    unit_price    DECIMAL(10,2) NOT NULL,
+    discount_pct  DECIMAL(5,2) DEFAULT 0,
+    FOREIGN KEY (order_id) REFERENCES orders(order_id),
+    FOREIGN KEY (product_id) REFERENCES products(product_id)
+);
+'''
+
+#Identify the top 5 products by revenue,
+# including product names and categories.
+
+'''
+WITH A AS(
+SELECT 
+     p.product_id ,
+     p.product_name,
+     p.category,
+     SUM(
+     (oi.quantity * oi.unit_price) * 1 - (COALESCE(oi.discount_pct,0) / 100.0)
+     ) AS total_revenue
+FROM products p
+JOIN order_items oi
+ON p.product_id = oi.product_id 
+GROUP BY p.product_id ,
+         p.product_name,
+         p.category
+),B AS(
+SELECT 
+     total_revenue ,
+     DENSE_RANK() OVER(
+                      ORDER BY revenue DESC) AS top_five_products
+FROM A 
+)
+SELECT * FROM B 
+WHERE top_five_products <= 5
+
+'''
+
+#----------------------------------
+
+#Find customers 
+#who have never placed a completed order.
+
+#SCHEMA
+
+'''
+CREATE TABLE customers (
+    customer_id   INT PRIMARY KEY,
+    customer_name VARCHAR(100) NOT NULL,
+    email         VARCHAR(150),
+    city          VARCHAR(80),
+    signup_date   DATE
+);
+
+
+CREATE TABLE orders (
+    order_id       INT PRIMARY KEY,
+    customer_id    INT,
+    employee_id    INT,
+    order_date     DATE,
+    status         VARCHAR(30),
+    payment_method VARCHAR(30),
+    FOREIGN KEY (customer_id) REFERENCES customers(customer_id),
+    FOREIGN KEY (employee_id) REFERENCES employees(employee_id)
+);
+
+'''
+
+
+"""
+SELECT 
+     c.customer_id,
+     c.customer_name ,
+     o.status
+FROM customers c
+LEFT JOIN orders o
+ON c.customer_id = o.customer_id
+AND o.status <> 'Completed'
+WHERE o.order_id IS NULL
+"""
+
+
+
+
+
+
+
+
+
+
+
+

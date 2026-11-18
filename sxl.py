@@ -1102,24 +1102,27 @@ unit_cost         NUMERIC(12,2)
 ## Display product name, category, total units sold, and total revenue.
 
 '''
-
-SELECT 
-      p.product_id,
-      p.product_name,
-      p.category,
-      SUM(oi.quantity) AS total_units_sold,
-      SUM(
-      (oi.quantity * oi.unit_price) * (1- COALESCE(oi.discount_pct,0)/100.0)
-      ) AS total_revenue
-FROM orders o
-JOIN order_items oi 
-ON o.order_id = oi.order_id
-JOIN products p
-ON oi.product_id = p.product_id
-WHERE o.status = 'Completed'
-ORDER BY total_revenue DESC 
-LIMIT 10 
-
+SELECT
+    p.product_name,
+    c.category_name,
+    SUM(oi.quantity) AS total_units_sold,
+    SUM(
+        oi.quantity * oi.unit_price *
+        (1 - COALESCE(oi.discount_pct,0)/100.0)
+    ) AS total_revenue
+FROM products p
+JOIN categories c
+    ON p.category_id = c.category_id
+JOIN order_items oi
+    ON p.product_id = oi.product_id
+JOIN orders o
+    ON oi.order_id = o.order_id
+GROUP BY
+    p.product_id,
+    p.product_name,
+    c.category_name
+ORDER BY total_revenue DESC
+LIMIT 10;
 '''
 
 #---------------------------------------------
@@ -1216,7 +1219,7 @@ GROUP BY e.employee_id ,
          e.employee_name
 HAVING  SUM(
      (oi.quantity * oi.unit_price) * (1-COALESCE(oi.discount_pct,0)/100.0)
-     ) > 100,000
+     ) > 100000
 """
 #------------------------------------------
 
@@ -1277,24 +1280,28 @@ unit_cost         NUMERIC(12,2)
 """
 
 '''
-SELECT  
-      p.product_id ,
-      p.product_name,
-      p.category_id,
-      SUM(
-      (oi.quantity * oi.unit_price) * (1-COALESCE(oi.discount_pct,0)/100.0)
-      ) AS total_revenue,
-      SUM(oi.quantity) AS total_units_sold
-FROM products p
-LEFT JOIN order_items oi 
-ON oi.product_id = p.product_id 
-LEFT JOIN orders o 
-ON o.order_id = oi.order_id 
-AND o.status = 'Completed'
-GROUP BY p.product_id ,
-         p.product_name,
-         p.category_id 
+SELECT
+    c.category_id,
+    c.category_name,
 
+    SUM(
+        oi.quantity * oi.unit_price *
+        (1 - COALESCE(oi.discount_pct,0)/100.0)
+    ) AS total_revenue,
+
+    SUM(oi.quantity) AS total_units_sold
+
+FROM categories c
+JOIN products p
+    ON c.category_id = p.category_id
+JOIN order_items oi
+    ON p.product_id = oi.product_id
+JOIN orders o
+    ON oi.order_id = o.order_id
+
+GROUP BY
+    c.category_id,
+    c.category_name;
 '''
 #-------------------------------------------------------
 #14 Calculate total revenue, total cost, and gross profit for each product.
@@ -1304,12 +1311,14 @@ WITH T AS(
 SELECT  
       p.product_id ,
       p.product_name,
-      SUM(oi.quantity * oi.unit_price) AS gross_revenue,
+      SUM(
+        oi.quantity * oi.unit_price *
+        (1 - COALESCE(oi.discount_pct,0)/100.0) AS gross_revenue,
       SUM(oi.quantity * oi.unit_cost) AS total_cost,
 FROM products p
-LEFT JOIN order_items oi 
+JOIN order_items oi 
 ON oi.product_id = p.product_id 
-LEFT JOIN orders o 
+JOIN orders o 
 ON o.order_id = oi.order_id 
 AND o.status = 'Completed'
 GROUP BY p.product_id ,
@@ -1350,30 +1359,29 @@ unit_cost         NUMERIC(12,2)
 '''
 
 '''
-WITH T AS(
-SELECT DISTINCT
-     o.order_id ,
-     COUNT(order_id) AS nums_of_orders,
-     SUM(
-     (oi.quantity * oi.unit_price) * (1 - COALESCE(oi.discount_pct)/100.0)
-     ) AS total_revenue ,
-     (
-     SUM(
-     (oi.quantity * oi.unit_price) * (1 - COALESCE(oi.discount_pct)/100.0)
-     )/  COUNT(order_id)
-     ) AS AOV
-FROM orders o 
-JOIN order_items oi 
-ON o.order_id = oi.order_id 
-WHERE o.status = 'Completed'
-GROUP BY o.order_id 
+WITH T AS (
+    SELECT
+        o.order_id,
+        SUM(
+            oi.quantity * oi.unit_price *
+            (1 - COALESCE(oi.discount_pct,0)/100.0)
+        ) AS total_order_value
+
+    FROM orders o
+    JOIN order_items oi
+        ON o.order_id = oi.order_id
+
+    WHERE o.status = 'Completed'
+
+    GROUP BY o.order_id
 )
-SELECT 
-      order_id ,
-      total_revenue,
-      AOV
-FROM T 
-WHERE total_revenue  >  AOV
+
+SELECT *
+FROM T
+WHERE total_order_value > (
+    SELECT AVG(total_order_value)
+    FROM T
+);
 
 '''
 
@@ -1463,14 +1471,17 @@ status            VARCHAR(30)
 '''
 
 '''
-SELECT  
-      p.product_id ,
-      p.product_name
+SELECT
+    p.product_id,
+    p.product_name
 FROM products p
-
 WHERE NOT EXISTS (
-SELECT 1 FROM orders o
-WHERE o.status = 'Completed'
+    SELECT 1
+    FROM order_items oi
+    JOIN orders o
+        ON oi.order_id = o.order_id
+    WHERE oi.product_id = p.product_id
+      AND o.status = 'Completed'
 )
 '''
 #----------------------------------------------
@@ -1488,45 +1499,49 @@ hire_date         DATE
 orders 
 '''
 """
-SELECT  
-     e.employee_id ,
-     e.employee_name
+SELECT
+    e.employee_id,
+    e.employee_name
 FROM employees e
 WHERE NOT EXISTS (
-SELECT 1 FROM orders o
-WHERE o.status = 'Completed'
-)
+    SELECT 1
+    FROM orders o
+    WHERE o.employee_id = e.employee_id
+      AND o.status = 'Completed'
+);
 """
 #----------------------------------------------
 #19 Find the five customers with the highest total completed-order spending,
 #including customer name, number of orders, and total spending.
 
 '''
-WITH T AS(
-SELECT DISTINCT
-     c.customer_id ,
-     c.customer_name,
-     COUNT(o.order_id) AS num_of_orders ,
-     SUM(
-     (oi.quantity * oi.unit_price) * (1 - COALESCE(oi.discount_pct,0)/100.0)
-     ) AS total_spending
+SELECT
+    c.customer_id,
+    c.customer_name,
+
+    COUNT(DISTINCT o.order_id) AS num_of_orders,
+
+    SUM(
+        oi.quantity * oi.unit_price *
+        (1 - COALESCE(oi.discount_pct,0)/100.0)
+    ) AS total_spending
+
 FROM customers c
-JOIN orders o 
-ON c.customer_id = o.customer_id 
+
+JOIN orders o
+    ON c.customer_id = o.customer_id
+
+JOIN order_items oi
+    ON o.order_id = oi.order_id
+
 WHERE o.status = 'Completed'
-JOIN order_items oi 
-ON o.order_id = oi.order_id 
-GROUP BY c.customer_id ,
-         c.customer_name
-)
-SELECT 
-      customer_name,
-      num_of_orders ,
-      total_spending
-FROM T 
+
+GROUP BY
+    c.customer_id,
+    c.customer_name
+
 ORDER BY total_spending DESC
-LIMIT 5 
-      
+LIMIT 5;
 '''
 #-------------------------------------------------
 #20 Retrieve the latest completed order for each customer.
@@ -1553,37 +1568,31 @@ status            VARCHAR(30)
 '''
 
 """
-WITH T AS(
+WITH T AS (
+    SELECT
+        c.customer_id,
+        c.customer_name,
+        o.order_id,
+        o.order_date,
 
-SELECT
-      c.customer_id ,
-      c.customer_name,
-      o.order_id ,
-      o.order_date
-FROM customers c 
-JOIN orders o
-ON c.customer_id = o.customer_id 
-WHERE o.status ='Completed'
-GROUP BY c.customer_id ,
-         c.customer_name
-     
-) , B AS(
+        ROW_NUMBER() OVER (
+            PARTITION BY c.customer_id
+            ORDER BY o.order_date DESC
+        ) AS rn
 
-SELECT 
-     customer_id ,
-     customer_name,
-     order_id ,
-     order_date,
-     ROW_NUMBER() OVER(
-                       PARTITION BY order_id 
-                       ORDER BY order_date ASC) AS latest_order
-FROM T 
+    FROM customers c
+    JOIN orders o
+        ON c.customer_id = o.customer_id
+
+    WHERE o.status = 'Completed'
 )
-SELECT * FROM B
-WHERE latest_order =1
+
+SELECT *
+FROM T
+WHERE rn = 1;
 """
 #--------------------------------------------------
-#Rank products by revenue within each category and 
+#21 Rank products by revenue within each category and 
 # retrieve the top three products from every category.
 
 '''
@@ -1626,41 +1635,47 @@ unit_cost         NUMERIC(12,2)
 # retrieve the top three products from every category.
 
 '''
-WITH T AS(
-SELECT 
-     c.category_id,
-     c.category_name,
-     p.product_id,
-     p.product_name,
-     SUM(
-     (oi.quantity * oi.unit_price) * (1 - COALESCE(oi.discount_pct,0)/100.0)
-     ) AS total_revenue
-FROM categories c
-JOIN products p
-ON c.category_id = p.category_id 
-JOIN order_items oi
-ON p.product_id = oi.product_id 
-JOIN orders o
-ON o.order_id = oi.order_id 
-WHERE o.status = 'Completed'
-GROUP BY c.category_id,
-         c.category_name,
-         p.product_id,
-         p.product_name
+WITH T AS (
+    SELECT
+        c.category_id,
+        c.category_name,
+        p.product_id,
+        p.product_name,
 
-), B AS(
-SELECT 
-      DENSE_RANK() OVER(
-                        PARTITION BY category_id , product_id
-                        ORDER BY total_revenue DESC) AS top_products,
-     DENSE_RANK()OVER (
-                       PARTITION BY category_id ,product_id
-                       ORDER BY total_revenue DESC) AS top_three
-FROM T 
+        SUM(
+            oi.quantity * oi.unit_price *
+            (1 - COALESCE(oi.discount_pct,0)/100.0)
+        ) AS total_revenue
+
+    FROM categories c
+    JOIN products p
+        ON c.category_id = p.category_id
+
+    JOIN order_items oi
+        ON p.product_id = oi.product_id
+
+    JOIN orders o
+        ON oi.order_id = o.order_id
+
+    GROUP BY
+        c.category_id,
+        c.category_name,
+        p.product_id,
+        p.product_name
+),
+B AS (
+    SELECT
+        *,
+        DENSE_RANK() OVER (
+            PARTITION BY category_id
+            ORDER BY total_revenue DESC
+        ) AS product_rank
+    FROM T
 )
-SELECT * FROM B 
-WHERE top_products =1
-AND top_three <= 3
+
+SELECT *
+FROM B
+WHERE product_rank <= 3
 '''
 
 #-------------------------------------------------
@@ -1690,38 +1705,45 @@ discount_pct      NUMERIC(5,2)
 unit_cost         NUMERIC(12,2)
 
 '''
-"""
-WITH T AS (
+"""WITH T AS (
     SELECT
         DATE_TRUNC('month', o.order_date) AS month,
+
         SUM(
             oi.quantity * oi.unit_price *
             (1 - COALESCE(oi.discount_pct,0)/100.0)
         ) AS monthly_revenue
+
     FROM orders o
     JOIN order_items oi
         ON o.order_id = oi.order_id
-    WHERE o.status = 'Completed'
+
     GROUP BY DATE_TRUNC('month', o.order_date)
 ),
 B AS (
     SELECT
         month,
         monthly_revenue,
+
         LAG(monthly_revenue) OVER (
             ORDER BY month
         ) AS prev_month
+
     FROM T
 )
 
 SELECT
     month,
     monthly_revenue,
+
     monthly_revenue - prev_month AS absolute_change,
-    (monthly_revenue - prev_month)
-        / NULLIF(prev_month, 0) * 100 AS percentage_change
+
+    (monthly_revenue - prev_month) * 100.0
+        / NULLIF(prev_month, 0) AS percentage_change
+
 FROM B
 WHERE prev_month IS NOT NULL
+ORDER BY month
 """
 #-------------------------------------------------
 
